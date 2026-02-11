@@ -295,7 +295,7 @@ func (s *Server) handleSendMessage(client *Client, msg *protocol.SendMessageMess
 	}
 
 	// Broadcast to all subscribers
-	s.hub.Broadcast(msg.ChannelID, chatMsg)
+	s.hub.Broadcast(msg.ChannelID, chatMsg, client.User())
 }
 
 // HandleIndex serves the main page.

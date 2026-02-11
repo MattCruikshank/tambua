@@ -125,10 +125,11 @@ func (h *Hub) unsubscribeFromChannel(client *Client, channelID string) {
 }
 
 // Broadcast sends a message to all clients subscribed to a channel.
-func (h *Hub) Broadcast(channelID string, msg *models.Message) {
+func (h *Hub) Broadcast(channelID string, msg *models.Message, author *models.User) {
 	env, err := protocol.NewEnvelope(protocol.TypeMessage, protocol.MessageMessage{
 		ChannelID: channelID,
 		Message:   *msg,
+		Author:    author,
 	})
 	if err != nil {
 		log.Printf("Failed to create message envelope: %v", err)

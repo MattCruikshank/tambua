@@ -71,6 +71,7 @@ type ChannelListMessage struct {
 type MessageMessage struct {
 	ChannelID string         `json:"channel_id"`
 	Message   models.Message `json:"message"`
+	Author    *models.User   `json:"author,omitempty"`
 }
 
 // ErrorMessage is sent by the server when an error occurs.
