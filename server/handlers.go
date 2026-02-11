@@ -296,13 +296,21 @@ func (s *Server) handleSendMessage(client *Client, msg *protocol.SendMessageMess
 		return
 	}
 
+	// Access control uses the client connection's identity
 	if !s.canAccessChannel(client.User(), channel) {
 		client.SendError(protocol.ErrCodeForbidden, "Access denied")
 		return
 	}
 
-	// Create and store the message
-	chatMsg, err := s.db.CreateMessage(msg.ChannelID, client.User(), msg.Content)
+	// Use asserted sender if provided (from tambua client), otherwise use client identity
+	author := client.User()
+	if msg.Sender != nil {
+		log.Printf("Message from %s via client %s", msg.Sender.LoginName, client.User().LoginName)
+		author = msg.Sender
+	}
+
+	// Create and store the message with the author (asserted sender or client)
+	chatMsg, err := s.db.CreateMessage(msg.ChannelID, author, msg.Content)
 	if err != nil {
 		log.Printf("Failed to create message: %v", err)
 		client.SendError(protocol.ErrCodeInternal, "Failed to save message")
@@ -310,7 +318,7 @@ func (s *Server) handleSendMessage(client *Client, msg *protocol.SendMessageMess
 	}
 
 	// Broadcast to all subscribers
-	s.hub.Broadcast(msg.ChannelID, chatMsg, client.User())
+	s.hub.Broadcast(msg.ChannelID, chatMsg, author)
 }
 
 func (s *Server) handleGetHistory(client *Client, msg *protocol.GetHistoryMessage) {

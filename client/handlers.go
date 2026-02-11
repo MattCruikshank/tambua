@@ -3,13 +3,16 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
 
 	"github.com/MattCruikshank/tambua/internal/db"
+	"github.com/MattCruikshank/tambua/internal/models"
 	"github.com/MattCruikshank/tambua/internal/protocol"
 	"github.com/gorilla/websocket"
+	"tailscale.com/client/tailscale"
 )
 
 var upgrader = websocket.Upgrader{
@@ -18,21 +21,29 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
+// uiClient represents a connected browser user.
+type uiClient struct {
+	conn *websocket.Conn
+	user *models.User
+}
+
 // ClientHandler handles HTTP requests for the client UI.
 type ClientHandler struct {
 	db         *db.ClientDB
 	aggregator *Aggregator
-	uiClients  map[*websocket.Conn]bool
+	lc         *tailscale.LocalClient
+	uiClients  map[*websocket.Conn]*uiClient
 	uiMu       sync.RWMutex
 	broadcast  chan []byte
 }
 
 // NewClientHandler creates a new client handler.
-func NewClientHandler(database *db.ClientDB, aggregator *Aggregator) *ClientHandler {
+func NewClientHandler(database *db.ClientDB, aggregator *Aggregator, lc *tailscale.LocalClient) *ClientHandler {
 	h := &ClientHandler{
 		db:         database,
 		aggregator: aggregator,
-		uiClients:  make(map[*websocket.Conn]bool),
+		lc:         lc,
+		uiClients:  make(map[*websocket.Conn]*uiClient),
 		broadcast:  make(chan []byte, 256),
 	}
 
@@ -77,8 +88,8 @@ func NewClientHandler(database *db.ClientDB, aggregator *Aggregator) *ClientHand
 func (h *ClientHandler) runBroadcast() {
 	for data := range h.broadcast {
 		h.uiMu.RLock()
-		for conn := range h.uiClients {
-			err := conn.WriteMessage(websocket.TextMessage, data)
+		for conn, client := range h.uiClients {
+			err := client.conn.WriteMessage(websocket.TextMessage, data)
 			if err != nil {
 				conn.Close()
 				delete(h.uiClients, conn)
@@ -107,24 +118,50 @@ func (h *ClientHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 
 // HandleWebSocket handles WebSocket connections from the browser UI.
 func (h *ClientHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Identify the browser user via Tailscale WhoIs
+	var user *models.User
+	if h.lc != nil {
+		who, err := h.lc.WhoIs(r.Context(), r.RemoteAddr)
+		if err != nil {
+			log.Printf("WhoIs failed for %s: %v", r.RemoteAddr, err)
+		} else if who.UserProfile != nil {
+			user = &models.User{
+				ID:          fmt.Sprintf("%d", who.UserProfile.ID),
+				LoginName:   who.UserProfile.LoginName,
+				DisplayName: who.UserProfile.DisplayName,
+				ProfilePic:  who.UserProfile.ProfilePicURL,
+			}
+			log.Printf("Browser user identified: %s", user.LoginName)
+		}
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		return
 	}
 
+	client := &uiClient{conn: conn, user: user}
 	h.uiMu.Lock()
-	h.uiClients[conn] = true
+	h.uiClients[conn] = client
 	h.uiMu.Unlock()
 
-	// Send initial state
-	h.sendInitialState(conn)
+	// Send initial state including the browser user's identity
+	h.sendInitialState(conn, user)
 
 	// Handle incoming messages
 	go h.handleUIMessages(conn)
 }
 
-func (h *ClientHandler) sendInitialState(conn *websocket.Conn) {
+func (h *ClientHandler) sendInitialState(conn *websocket.Conn, browserUser *models.User) {
+	// Send the browser user's identity first
+	if browserUser != nil {
+		conn.WriteJSON(map[string]interface{}{
+			"type": "identity",
+			"user": browserUser,
+		})
+	}
+
 	// Send enrolled servers
 	servers, _ := h.db.GetEnrolledServers()
 	conn.WriteJSON(map[string]interface{}{
@@ -139,7 +176,6 @@ func (h *ClientHandler) sendInitialState(conn *websocket.Conn) {
 			"server_id":  sc.GetEnrolledServer().ID,
 			"server":     sc.GetServerInfo(),
 			"categories": sc.GetCategories(),
-			"user":       sc.GetUser(),
 		})
 	}
 }
@@ -215,7 +251,15 @@ func (h *ClientHandler) handleUIMessage(conn *websocket.Conn, msg map[string]int
 		serverID, _ := msg["server_id"].(string)
 		channelID, _ := msg["channel_id"].(string)
 		content, _ := msg["content"].(string)
-		if err := h.aggregator.SendMessage(serverID, channelID, content); err != nil {
+		// Get the browser user for this connection
+		h.uiMu.RLock()
+		client := h.uiClients[conn]
+		var sender *models.User
+		if client != nil {
+			sender = client.user
+		}
+		h.uiMu.RUnlock()
+		if err := h.aggregator.SendMessage(serverID, channelID, content, sender); err != nil {
 			conn.WriteJSON(map[string]interface{}{
 				"type":  "error",
 				"error": err.Error(),

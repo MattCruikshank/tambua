@@ -217,7 +217,7 @@ func (a *Aggregator) Unsubscribe(serverID, channelID string) error {
 }
 
 // SendMessage sends a message to a channel on a server.
-func (a *Aggregator) SendMessage(serverID, channelID, content string) error {
+func (a *Aggregator) SendMessage(serverID, channelID, content string, sender *models.User) error {
 	conn := a.GetConnection(serverID)
 	if conn == nil {
 		return fmt.Errorf("not connected to server %s", serverID)
@@ -226,6 +226,7 @@ func (a *Aggregator) SendMessage(serverID, channelID, content string) error {
 	env, err := protocol.NewEnvelope(protocol.TypeSendMessage, protocol.SendMessageMessage{
 		ChannelID: channelID,
 		Content:   content,
+		Sender:    sender,
 	})
 	if err != nil {
 		return err

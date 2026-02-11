@@ -48,9 +48,15 @@ func main() {
 	}
 	defer ln.Close()
 
+	// Get LocalClient for WhoIs on browser connections
+	lc, err := tsServer.LocalClient()
+	if err != nil {
+		log.Fatalf("Failed to get local client: %v", err)
+	}
+
 	// Initialize aggregator and handlers
 	aggregator := client.NewAggregator(database, tsServer)
-	handler := client.NewClientHandler(database, aggregator)
+	handler := client.NewClientHandler(database, aggregator, lc)
 
 	// Set up routes
 	mux := http.NewServeMux()

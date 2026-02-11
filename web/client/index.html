@@ -301,16 +301,17 @@
 
         function handleMessage(msg) {
             switch (msg.type) {
+                case 'identity':
+                    // Browser user's Tailscale identity
+                    currentUser = msg.user;
+                    updateUserDisplay();
+                    break;
                 case 'servers':
                     servers = msg.servers || [];
                     renderServers();
                     break;
                 case 'server_update':
                     serverCategories[msg.server_id] = msg.categories || [];
-                    if (msg.user) {
-                        currentUser = msg.user;
-                        updateUserDisplay();
-                    }
                     if (msg.server && currentServer === msg.server_id) {
                         renderChannels();
                     }

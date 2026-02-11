@@ -48,8 +48,9 @@ type UnsubscribeMessage struct {
 
 // SendMessageMessage is sent by the client to send a chat message.
 type SendMessageMessage struct {
-	ChannelID string `json:"channel_id"`
-	Content   string `json:"content"`
+	ChannelID string       `json:"channel_id"`
+	Content   string       `json:"content"`
+	Sender    *models.User `json:"sender,omitempty"` // Asserted browser user identity (from tambua client)
 }
 
 // GetHistoryMessage is sent by the client to request message history.
