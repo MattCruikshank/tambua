@@ -208,6 +208,10 @@ func (h *ClientHandler) handleUIMessage(conn *websocket.Conn, msg map[string]int
 	msgType, _ := msg["type"].(string)
 
 	switch msgType {
+	case "debug":
+		message, _ := msg["message"].(string)
+		log.Printf("[browser] %s", message)
+
 	case "connect":
 		hostname, _ := msg["hostname"].(string)
 		if hostname == "" {

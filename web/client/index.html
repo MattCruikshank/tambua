@@ -6,12 +6,16 @@
     <title>Tambua</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            height: 100%;
+            height: 100dvh; /* Dynamic viewport height - excludes browser chrome */
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #1a1a2e;
             color: #eee;
-            height: 100vh;
             display: flex;
+            overflow: hidden;
         }
         .sidebar {
             width: 240px;
@@ -269,6 +273,7 @@
                 left: 0;
                 right: 0;
                 bottom: 0;
+                height: 100%;
                 width: 100%;
                 border-right: none;
                 z-index: 1;
@@ -280,6 +285,7 @@
                 left: 0;
                 right: 0;
                 bottom: 0;
+                height: 100%;
                 width: 100%;
                 border-right: none;
                 z-index: 10;
@@ -312,6 +318,7 @@
                 left: 0;
                 right: 0;
                 bottom: 0;
+                height: 100%;
                 z-index: 20;
                 background: #1a1a2e;
                 transform: translateX(100%);
@@ -419,12 +426,22 @@
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${location.host}/ws`);
 
-            ws.onopen = () => console.log('Connected to client');
+            ws.onopen = () => {
+                console.log('Connected to client');
+                sendDebug(`Connected - window: ${window.innerWidth}x${window.innerHeight}, screen: ${screen.width}x${screen.height}, devicePixelRatio: ${window.devicePixelRatio}, isMobile: ${isMobile()}`);
+            };
             ws.onclose = () => {
                 console.log('Disconnected, reconnecting...');
                 setTimeout(connect, 1000);
             };
             ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+        }
+
+        function sendDebug(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'debug', message: message }));
+            }
+            console.log('[debug]', message);
         }
 
         function handleMessage(msg) {
@@ -699,6 +716,7 @@
 
         // Handle resize events
         window.addEventListener('resize', () => {
+            sendDebug(`Resize - window: ${window.innerWidth}x${window.innerHeight}, isMobile: ${isMobile()}`);
             const channelsPanel = document.getElementById('channelsPanel');
             const mainPanel = document.getElementById('mainPanel');
 
