@@ -65,6 +65,8 @@ func (s *ServerDB) migrate() error {
 			id TEXT PRIMARY KEY,
 			channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
 			author_id TEXT NOT NULL,
+			author_display_name TEXT NOT NULL DEFAULT '',
+			author_login_name TEXT NOT NULL DEFAULT '',
 			content TEXT NOT NULL,
 			timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
@@ -82,8 +84,15 @@ func (s *ServerDB) migrate() error {
 			PRIMARY KEY (group_id, user_id)
 		);
 	`
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+
+	// Migration for existing tables (ignore errors if columns exist)
+	s.db.Exec(`ALTER TABLE messages ADD COLUMN author_display_name TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE messages ADD COLUMN author_login_name TEXT NOT NULL DEFAULT ''`)
+
+	return nil
 }
 
 // GetServerInfo retrieves server metadata.
@@ -224,19 +233,31 @@ func (s *ServerDB) DeleteChannel(id string) error {
 	return err
 }
 
+// ClearChannelMessages removes all messages from a channel.
+func (s *ServerDB) ClearChannelMessages(channelID string) error {
+	_, err := s.db.Exec(`DELETE FROM messages WHERE channel_id = ?`, channelID)
+	return err
+}
+
 // CreateMessage creates a new message.
-func (s *ServerDB) CreateMessage(channelID, authorID, content string) (*models.Message, error) {
+func (s *ServerDB) CreateMessage(channelID string, author *models.User, content string) (*models.Message, error) {
 	id := uuid.New().String()
 	now := time.Now().UTC()
-	_, err := s.db.Exec(`INSERT INTO messages (id, channel_id, author_id, content, timestamp) VALUES (?, ?, ?, ?, ?)`,
-		id, channelID, authorID, content, now)
+	displayName := ""
+	loginName := ""
+	if author != nil {
+		displayName = author.DisplayName
+		loginName = author.LoginName
+	}
+	_, err := s.db.Exec(`INSERT INTO messages (id, channel_id, author_id, author_display_name, author_login_name, content, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		id, channelID, author.ID, displayName, loginName, content, now)
 	if err != nil {
 		return nil, err
 	}
 	return &models.Message{
 		ID:        id,
 		ChannelID: channelID,
-		AuthorID:  authorID,
+		AuthorID:  author.ID,
 		Content:   content,
 		Timestamp: now,
 	}, nil
@@ -270,6 +291,59 @@ func (s *ServerDB) GetMessages(channelID string, limit int, before *time.Time) (
 		if err := rows.Scan(&m.ID, &m.ChannelID, &m.AuthorID, &m.Content, &m.Timestamp); err != nil {
 			return nil, err
 		}
+		messages = append(messages, m)
+	}
+	// Reverse to get chronological order
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+	return messages, rows.Err()
+}
+
+// MessageWithAuthor holds a message with its author info.
+type MessageWithAuthor struct {
+	Message models.Message
+	Author  models.User
+}
+
+// GetMessagesWithAuthors returns messages with author info for a channel.
+// If beforeID is provided, returns messages older than that message.
+func (s *ServerDB) GetMessagesWithAuthors(channelID string, limit int, beforeID string) ([]MessageWithAuthor, error) {
+	var rows *sql.Rows
+	var err error
+
+	if beforeID != "" {
+		// Get the timestamp of the "before" message
+		var beforeTime time.Time
+		err = s.db.QueryRow(`SELECT timestamp FROM messages WHERE id = ?`, beforeID).Scan(&beforeTime)
+		if err != nil {
+			return nil, err
+		}
+		rows, err = s.db.Query(`
+			SELECT id, channel_id, author_id, author_display_name, author_login_name, content, timestamp
+			FROM messages WHERE channel_id = ? AND timestamp < ?
+			ORDER BY timestamp DESC LIMIT ?
+		`, channelID, beforeTime, limit)
+	} else {
+		rows, err = s.db.Query(`
+			SELECT id, channel_id, author_id, author_display_name, author_login_name, content, timestamp
+			FROM messages WHERE channel_id = ?
+			ORDER BY timestamp DESC LIMIT ?
+		`, channelID, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []MessageWithAuthor
+	for rows.Next() {
+		var m MessageWithAuthor
+		if err := rows.Scan(&m.Message.ID, &m.Message.ChannelID, &m.Message.AuthorID,
+			&m.Author.DisplayName, &m.Author.LoginName, &m.Message.Content, &m.Message.Timestamp); err != nil {
+			return nil, err
+		}
+		m.Author.ID = m.Message.AuthorID
 		messages = append(messages, m)
 	}
 	// Reverse to get chronological order

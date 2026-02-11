@@ -50,18 +50,9 @@ func (c *ClientDB) migrate() error {
 			value TEXT NOT NULL
 		);
 
-		CREATE TABLE IF NOT EXISTS cached_messages (
-			server_id TEXT NOT NULL,
-			channel_id TEXT NOT NULL,
-			message_id TEXT NOT NULL,
-			author_id TEXT NOT NULL,
-			content TEXT NOT NULL,
-			timestamp DATETIME NOT NULL,
-			PRIMARY KEY (server_id, message_id)
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_cached_messages_channel
-			ON cached_messages(server_id, channel_id, timestamp);
+		-- NOTE: Message caching is disabled for now. If re-enabled in the future,
+		-- add a cached_messages table here to store messages locally for offline
+		-- access and faster channel switching.
 	`
 	_, err := c.db.Exec(schema)
 	return err
@@ -162,46 +153,5 @@ func (c *ClientDB) SetPreference(key, value string) error {
 	return err
 }
 
-// CacheMessage caches a message locally.
-func (c *ClientDB) CacheMessage(msg *models.CachedMessage) error {
-	_, err := c.db.Exec(`
-		INSERT OR REPLACE INTO cached_messages
-			(server_id, channel_id, message_id, author_id, content, timestamp)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, msg.ServerID, msg.ChannelID, msg.MessageID, msg.AuthorID, msg.Content, msg.Timestamp)
-	return err
-}
-
-// GetCachedMessages retrieves cached messages for a channel.
-func (c *ClientDB) GetCachedMessages(serverID, channelID string, limit int) ([]models.CachedMessage, error) {
-	rows, err := c.db.Query(`
-		SELECT server_id, channel_id, message_id, author_id, content, timestamp
-		FROM cached_messages
-		WHERE server_id = ? AND channel_id = ?
-		ORDER BY timestamp DESC LIMIT ?
-	`, serverID, channelID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var messages []models.CachedMessage
-	for rows.Next() {
-		var m models.CachedMessage
-		if err := rows.Scan(&m.ServerID, &m.ChannelID, &m.MessageID, &m.AuthorID, &m.Content, &m.Timestamp); err != nil {
-			return nil, err
-		}
-		messages = append(messages, m)
-	}
-	// Reverse to get chronological order
-	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
-		messages[i], messages[j] = messages[j], messages[i]
-	}
-	return messages, rows.Err()
-}
-
-// ClearCachedMessages clears cached messages for a server.
-func (c *ClientDB) ClearCachedMessages(serverID string) error {
-	_, err := c.db.Exec(`DELETE FROM cached_messages WHERE server_id = ?`, serverID)
-	return err
-}
+// NOTE: Message caching functions removed. If caching is re-enabled in the future,
+// add CacheMessage, GetCachedMessages, and ClearCachedMessages functions here.

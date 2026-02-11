@@ -26,6 +26,14 @@ func main() {
 		log.Fatalf("Failed to create config directory: %v", err)
 	}
 
+	// Initialize database
+	dbPath := filepath.Join(configDir, "client.db")
+	database, err := db.NewClientDB(dbPath)
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer database.Close()
+
 	// Initialize tsnet server
 	tsServer := &tsnet.Server{
 		Hostname: hostname,
@@ -39,14 +47,6 @@ func main() {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 	defer ln.Close()
-
-	// Initialize database
-	dbPath := filepath.Join(configDir, "client.db")
-	database, err := db.NewClientDB(dbPath)
-	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
-	}
-	defer database.Close()
 
 	// Initialize aggregator and handlers
 	aggregator := client.NewAggregator(database, tsServer)

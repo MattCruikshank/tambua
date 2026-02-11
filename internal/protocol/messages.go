@@ -15,11 +15,13 @@ const (
 	TypeSubscribe   MessageType = "subscribe"
 	TypeUnsubscribe MessageType = "unsubscribe"
 	TypeSendMessage MessageType = "send_message"
+	TypeGetHistory  MessageType = "get_history"
 
 	// Server -> Client
 	TypeAuthOK      MessageType = "auth_ok"
 	TypeChannelList MessageType = "channel_list"
 	TypeMessage     MessageType = "message"
+	TypeHistory     MessageType = "history"
 	TypeError       MessageType = "error"
 )
 
@@ -50,6 +52,13 @@ type SendMessageMessage struct {
 	Content   string `json:"content"`
 }
 
+// GetHistoryMessage is sent by the client to request message history.
+type GetHistoryMessage struct {
+	ChannelID string `json:"channel_id"`
+	Before    string `json:"before,omitempty"` // Message ID to fetch messages before (for pagination)
+	Limit     int    `json:"limit,omitempty"`  // Max messages to return (default 100)
+}
+
 // AuthOKMessage is sent by the server after successful authentication.
 type AuthOKMessage struct {
 	User   models.User   `json:"user"`
@@ -72,6 +81,19 @@ type MessageMessage struct {
 	ChannelID string         `json:"channel_id"`
 	Message   models.Message `json:"message"`
 	Author    *models.User   `json:"author,omitempty"`
+}
+
+// MessageWithAuthor pairs a message with its author info.
+type MessageWithAuthor struct {
+	Message models.Message `json:"message"`
+	Author  *models.User   `json:"author,omitempty"`
+}
+
+// HistoryMessage is sent by the server with message history.
+type HistoryMessage struct {
+	ChannelID string              `json:"channel_id"`
+	Messages  []MessageWithAuthor `json:"messages"`
+	HasMore   bool                `json:"has_more"` // True if more older messages exist
 }
 
 // ErrorMessage is sent by the server when an error occurs.

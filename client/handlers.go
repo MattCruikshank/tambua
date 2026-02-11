@@ -46,6 +46,16 @@ func NewClientHandler(database *db.ClientDB, aggregator *Aggregator) *ClientHand
 		h.broadcastToUI(data)
 	})
 
+	// Set up history handler to forward to UI
+	aggregator.SetHistoryHandler(func(serverID string, msg *protocol.HistoryMessage) {
+		data, _ := json.Marshal(map[string]interface{}{
+			"type":      "history",
+			"server_id": serverID,
+			"history":   msg,
+		})
+		h.broadcastToUI(data)
+	})
+
 	aggregator.SetUpdateHandler(func(serverID string) {
 		conn := aggregator.GetConnection(serverID)
 		if conn == nil {
@@ -212,23 +222,16 @@ func (h *ClientHandler) handleUIMessage(conn *websocket.Conn, msg map[string]int
 			})
 		}
 
-	case "get_cached_messages":
+	case "get_history":
 		serverID, _ := msg["server_id"].(string)
 		channelID, _ := msg["channel_id"].(string)
-		messages, err := h.db.GetCachedMessages(serverID, channelID, 50)
-		if err != nil {
+		beforeID, _ := msg["before"].(string)
+		if err := h.aggregator.GetHistory(serverID, channelID, beforeID); err != nil {
 			conn.WriteJSON(map[string]interface{}{
 				"type":  "error",
 				"error": err.Error(),
 			})
-			return
 		}
-		conn.WriteJSON(map[string]interface{}{
-			"type":       "cached_messages",
-			"server_id":  serverID,
-			"channel_id": channelID,
-			"messages":   messages,
-		})
 	}
 }
 

@@ -169,6 +169,17 @@ func (h *Hub) Unregister(client *Client) {
 	h.unregister <- client
 }
 
+// GetClients returns all connected clients.
+func (h *Hub) GetClients() []*Client {
+	h.clientsMu.RLock()
+	defer h.clientsMu.RUnlock()
+	clients := make([]*Client, 0, len(h.clients))
+	for client := range h.clients {
+		clients = append(clients, client)
+	}
+	return clients
+}
+
 // Send sends data to the client.
 func (c *Client) Send(data []byte) {
 	select {

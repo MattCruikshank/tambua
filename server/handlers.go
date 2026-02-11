@@ -123,6 +123,13 @@ func (s *Server) sendChannelList(client *Client) {
 	})
 }
 
+// BroadcastChannelList sends updated channel list to all connected clients.
+func (s *Server) BroadcastChannelList() {
+	for _, client := range s.hub.GetClients() {
+		s.sendChannelList(client)
+	}
+}
+
 func (s *Server) canAccessChannel(user *models.User, channel *models.Channel) bool {
 	// If no allow/deny lists, channel is accessible to all
 	if len(channel.AllowList) == 0 && len(channel.DenyList) == 0 {
@@ -248,6 +255,14 @@ func (s *Server) handleMessage(client *Client, data []byte) {
 		}
 		s.handleSendMessage(client, &msg)
 
+	case protocol.TypeGetHistory:
+		var msg protocol.GetHistoryMessage
+		if err := json.Unmarshal(env.Data, &msg); err != nil {
+			client.SendError(protocol.ErrCodeInvalidMsg, "Invalid get_history")
+			return
+		}
+		s.handleGetHistory(client, &msg)
+
 	default:
 		client.SendError(protocol.ErrCodeInvalidMsg, "Unknown message type")
 	}
@@ -287,7 +302,7 @@ func (s *Server) handleSendMessage(client *Client, msg *protocol.SendMessageMess
 	}
 
 	// Create and store the message
-	chatMsg, err := s.db.CreateMessage(msg.ChannelID, client.User().ID, msg.Content)
+	chatMsg, err := s.db.CreateMessage(msg.ChannelID, client.User(), msg.Content)
 	if err != nil {
 		log.Printf("Failed to create message: %v", err)
 		client.SendError(protocol.ErrCodeInternal, "Failed to save message")
@@ -296,6 +311,52 @@ func (s *Server) handleSendMessage(client *Client, msg *protocol.SendMessageMess
 
 	// Broadcast to all subscribers
 	s.hub.Broadcast(msg.ChannelID, chatMsg, client.User())
+}
+
+func (s *Server) handleGetHistory(client *Client, msg *protocol.GetHistoryMessage) {
+	channel, err := s.db.GetChannel(msg.ChannelID)
+	if err != nil || channel == nil {
+		client.SendError(protocol.ErrCodeNotFound, "Channel not found")
+		return
+	}
+
+	if !s.canAccessChannel(client.User(), channel) {
+		client.SendError(protocol.ErrCodeForbidden, "Access denied")
+		return
+	}
+
+	limit := msg.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
+	// Fetch one extra to determine if there are more messages
+	dbMessages, err := s.db.GetMessagesWithAuthors(msg.ChannelID, limit+1, msg.Before)
+	if err != nil {
+		log.Printf("Failed to get messages: %v", err)
+		client.SendError(protocol.ErrCodeInternal, "Failed to get messages")
+		return
+	}
+
+	hasMore := len(dbMessages) > limit
+	if hasMore {
+		dbMessages = dbMessages[1:] // Remove the oldest (first after reversal)
+	}
+
+	// Convert to protocol format
+	messages := make([]protocol.MessageWithAuthor, len(dbMessages))
+	for i, m := range dbMessages {
+		messages[i] = protocol.MessageWithAuthor{
+			Message: m.Message,
+			Author:  &m.Author,
+		}
+	}
+
+	client.SendEnvelope(protocol.TypeHistory, protocol.HistoryMessage{
+		ChannelID: msg.ChannelID,
+		Messages:  messages,
+		HasMore:   hasMore,
+	})
 }
 
 // HandleIndex serves the main page.

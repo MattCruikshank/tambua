@@ -145,6 +145,29 @@
             color: #666;
         }
         .empty-state p { margin-top: 8px; }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+        }
+        .load-more {
+            text-align: center;
+            padding: 12px;
+            margin-bottom: 8px;
+        }
+        .load-more button {
+            background: #3a3a5a;
+            border: none;
+            color: #aaa;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .load-more button:hover {
+            background: #4a4a6a;
+            color: #eee;
+        }
         .modal {
             display: none;
             position: fixed;
@@ -261,6 +284,8 @@
         let currentChannel = null;
         let serverCategories = {};
         let currentUser = null; // Our Tailscale identity
+        let oldestMessageId = null; // For pagination
+        let hasMoreMessages = false;
 
         function connect() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -295,9 +320,13 @@
                         appendMessage(msg.message.message, msg.message.author);
                     }
                     break;
-                case 'cached_messages':
-                    if (msg.server_id === currentServer && msg.channel_id === currentChannel) {
-                        renderMessages(msg.messages || []);
+                case 'history':
+                    if (msg.server_id === currentServer && msg.history.channel_id === currentChannel) {
+                        if (oldestMessageId === null) {
+                            renderHistory(msg.history);
+                        } else {
+                            prependHistory(msg.history);
+                        }
                     }
                     break;
                 case 'error':
@@ -353,24 +382,73 @@
                 ws.send(JSON.stringify({ type: 'unsubscribe', server_id: currentServer, channel_id: currentChannel }));
             }
             currentChannel = id;
+            oldestMessageId = null;
+            hasMoreMessages = false;
             renderChannels();
             document.getElementById('channelName').textContent = name;
             document.getElementById('mainHeader').style.display = 'flex';
             document.getElementById('inputContainer').style.display = 'block';
-            document.getElementById('messages').innerHTML = '';
+            document.getElementById('messages').innerHTML = '<div class="loading">Loading messages...</div>';
 
             ws.send(JSON.stringify({ type: 'subscribe', server_id: currentServer, channel_id: id }));
-            ws.send(JSON.stringify({ type: 'get_cached_messages', server_id: currentServer, channel_id: id }));
+            ws.send(JSON.stringify({ type: 'get_history', server_id: currentServer, channel_id: id }));
         }
 
-        function renderMessages(messages) {
+        function renderHistory(history) {
             const container = document.getElementById('messages');
-            container.innerHTML = messages.map(m => formatMessage(m, null)).join('');
+            const messages = history.messages || [];
+            hasMoreMessages = history.has_more;
+
+            if (messages.length > 0) {
+                oldestMessageId = messages[0].message.id;
+            }
+
+            let html = '';
+            if (hasMoreMessages) {
+                html += '<div class="load-more"><button onclick="loadMoreMessages()">Load older messages</button></div>';
+            }
+            html += messages.map(m => formatMessage(m.message, m.author)).join('');
+            container.innerHTML = html;
             container.scrollTop = container.scrollHeight;
+        }
+
+        function loadMoreMessages() {
+            if (!oldestMessageId || !currentServer || !currentChannel) return;
+            ws.send(JSON.stringify({
+                type: 'get_history',
+                server_id: currentServer,
+                channel_id: currentChannel,
+                before: oldestMessageId
+            }));
+        }
+
+        function prependHistory(history) {
+            const container = document.getElementById('messages');
+            const messages = history.messages || [];
+            hasMoreMessages = history.has_more;
+
+            if (messages.length > 0) {
+                oldestMessageId = messages[0].message.id;
+            }
+
+            // Remove old load more button
+            const oldBtn = container.querySelector('.load-more');
+            if (oldBtn) oldBtn.remove();
+
+            // Add new content at the top
+            let html = '';
+            if (hasMoreMessages) {
+                html += '<div class="load-more"><button onclick="loadMoreMessages()">Load older messages</button></div>';
+            }
+            html += messages.map(m => formatMessage(m.message, m.author)).join('');
+            container.insertAdjacentHTML('afterbegin', html);
         }
 
         function appendMessage(msg, author) {
             const container = document.getElementById('messages');
+            // Remove loading message if present
+            const loading = container.querySelector('.loading');
+            if (loading) loading.remove();
             container.innerHTML += formatMessage(msg, author);
             container.scrollTop = container.scrollHeight;
         }

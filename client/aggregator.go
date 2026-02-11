@@ -38,6 +38,7 @@ type Aggregator struct {
 	connections map[string]*ServerConnection // serverID -> connection
 	connMu      sync.RWMutex
 	onMessage   func(serverID string, msg *protocol.MessageMessage)
+	onHistory   func(serverID string, msg *protocol.HistoryMessage)
 	onUpdate    func(serverID string) // Called when channel list updates
 }
 
@@ -59,6 +60,11 @@ func NewAggregator(database *db.ClientDB, tsServer *tsnet.Server) *Aggregator {
 // SetMessageHandler sets the callback for incoming messages.
 func (a *Aggregator) SetMessageHandler(handler func(serverID string, msg *protocol.MessageMessage)) {
 	a.onMessage = handler
+}
+
+// SetHistoryHandler sets the callback for message history.
+func (a *Aggregator) SetHistoryHandler(handler func(serverID string, msg *protocol.HistoryMessage)) {
+	a.onHistory = handler
 }
 
 // SetUpdateHandler sets the callback for server updates.
@@ -234,6 +240,31 @@ func (a *Aggregator) SendMessage(serverID, channelID, content string) error {
 	return nil
 }
 
+// GetHistory requests message history for a channel.
+func (a *Aggregator) GetHistory(serverID, channelID, beforeID string) error {
+	conn := a.GetConnection(serverID)
+	if conn == nil {
+		return fmt.Errorf("not connected to server %s", serverID)
+	}
+
+	env, err := protocol.NewEnvelope(protocol.TypeGetHistory, protocol.GetHistoryMessage{
+		ChannelID: channelID,
+		Before:    beforeID,
+		Limit:     100,
+	})
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+
+	conn.send <- data
+	return nil
+}
+
 func (a *Aggregator) readPump(sc *ServerConnection) {
 	defer func() {
 		a.Disconnect(sc.server.ID)
@@ -336,18 +367,19 @@ func (a *Aggregator) handleMessage(sc *ServerConnection, data []byte) {
 			return
 		}
 
-		// Cache the message
-		a.db.CacheMessage(&models.CachedMessage{
-			ServerID:  sc.server.ID,
-			ChannelID: msg.ChannelID,
-			MessageID: msg.Message.ID,
-			AuthorID:  msg.Message.AuthorID,
-			Content:   msg.Message.Content,
-			Timestamp: msg.Message.Timestamp,
-		})
-
 		if a.onMessage != nil {
 			a.onMessage(sc.server.ID, &msg)
+		}
+
+	case protocol.TypeHistory:
+		var msg protocol.HistoryMessage
+		if err := json.Unmarshal(env.Data, &msg); err != nil {
+			log.Printf("Failed to parse history: %v", err)
+			return
+		}
+
+		if a.onHistory != nil {
+			a.onHistory(sc.server.ID, &msg)
 		}
 
 	case protocol.TypeError:

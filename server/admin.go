@@ -12,15 +12,17 @@ import (
 
 // AdminHandler handles admin API requests.
 type AdminHandler struct {
-	db   *db.ServerDB
-	auth *auth.Authenticator
+	db     *db.ServerDB
+	auth   *auth.Authenticator
+	server *Server
 }
 
 // NewAdminHandler creates a new admin handler.
-func NewAdminHandler(database *db.ServerDB, authenticator *auth.Authenticator) *AdminHandler {
+func NewAdminHandler(database *db.ServerDB, authenticator *auth.Authenticator, server *Server) *AdminHandler {
 	return &AdminHandler{
-		db:   database,
-		auth: authenticator,
+		db:     database,
+		auth:   authenticator,
+		server: server,
 	}
 }
 
@@ -62,6 +64,7 @@ func (a *AdminHandler) HandleCategories(w http.ResponseWriter, r *http.Request) 
 		}
 		w.WriteHeader(http.StatusCreated)
 		a.writeJSON(w, cat)
+		a.server.BroadcastChannelList()
 
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -89,6 +92,7 @@ func (a *AdminHandler) HandleCategory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.writeJSON(w, cat)
+		a.server.BroadcastChannelList()
 
 	case http.MethodDelete:
 		if err := a.db.DeleteCategory(id); err != nil {
@@ -96,6 +100,7 @@ func (a *AdminHandler) HandleCategory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+		a.server.BroadcastChannelList()
 
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -136,6 +141,7 @@ func (a *AdminHandler) HandleChannels(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusCreated)
 		a.writeJSON(w, ch)
+		a.server.BroadcastChannelList()
 
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -175,6 +181,7 @@ func (a *AdminHandler) HandleChannel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.writeJSON(w, ch)
+		a.server.BroadcastChannelList()
 
 	case http.MethodDelete:
 		if err := a.db.DeleteChannel(id); err != nil {
@@ -182,10 +189,31 @@ func (a *AdminHandler) HandleChannel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+		a.server.BroadcastChannelList()
 
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+// HandleClearChannelMessages clears all messages from a channel.
+func (a *AdminHandler) HandleClearChannelMessages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		a.writeError(w, http.StatusBadRequest, "Missing channel ID")
+		return
+	}
+
+	if err := a.db.ClearChannelMessages(id); err != nil {
+		a.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // HandleMessages handles message retrieval.

@@ -61,7 +61,7 @@ func main() {
 	go hub.Run()
 
 	srv := server.NewServer(hub, database, authenticator, hostname)
-	admin := server.NewAdminHandler(database, authenticator)
+	admin := server.NewAdminHandler(database, authenticator, srv)
 
 	// Set up routes
 	mux := http.NewServeMux()
@@ -75,6 +75,7 @@ func main() {
 	mux.HandleFunc("/api/categories/{id}", admin.HandleCategory)
 	mux.HandleFunc("/api/channels", admin.HandleChannels)
 	mux.HandleFunc("/api/channels/{id}", admin.HandleChannel)
+	mux.HandleFunc("/api/channels/{id}/clear", admin.HandleClearChannelMessages)
 	mux.HandleFunc("/api/messages", admin.HandleMessages)
 	mux.HandleFunc("/api/groups", admin.HandleGroups)
 	mux.HandleFunc("/api/groups/{id}", admin.HandleGroup)

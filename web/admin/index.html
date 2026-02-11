@@ -346,7 +346,10 @@
                         ${(cat.channels || []).map(ch => `
                             <div class="channel-item">
                                 <span class="channel-name">${ch.name}</span>
-                                <button class="btn btn-danger btn-small" onclick="deleteChannel('${ch.id}')">Delete</button>
+                                <div class="actions">
+                                    <button class="btn btn-small" onclick="clearChannel('${ch.id}')">Clear</button>
+                                    <button class="btn btn-danger btn-small" onclick="deleteChannel('${ch.id}')">Delete</button>
+                                </div>
                             </div>
                         `).join('') || '<div class="empty">No channels</div>'}
                     </div>
@@ -422,6 +425,16 @@
                 loadCategories();
             } catch (e) {
                 alert('Failed to delete: ' + e.message);
+            }
+        }
+
+        async function clearChannel(id) {
+            if (!confirm('Clear all messages from this channel?')) return;
+            try {
+                await api('/channels/' + id + '/clear', { method: 'POST' });
+                alert('Messages cleared');
+            } catch (e) {
+                alert('Failed to clear: ' + e.message);
             }
         }
 

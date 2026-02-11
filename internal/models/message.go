@@ -11,12 +11,5 @@ type Message struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// CachedMessage represents a message cached on the client side.
-type CachedMessage struct {
-	ServerID  string    `json:"server_id"`
-	ChannelID string    `json:"channel_id"`
-	MessageID string    `json:"message_id"`
-	AuthorID  string    `json:"author_id"`
-	Content   string    `json:"content"`
-	Timestamp time.Time `json:"timestamp"`
-}
+// NOTE: CachedMessage struct removed. If client-side caching is re-enabled,
+// define a CachedMessage struct here to store messages locally.
