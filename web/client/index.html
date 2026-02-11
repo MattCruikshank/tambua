@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
     <title>Tambua</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -53,9 +53,12 @@
         .channels {
             width: 200px;
             background: #1e1e3a;
-            display: flex;
+            display: none;
             flex-direction: column;
             border-right: 1px solid #2a2a4a;
+        }
+        .channels.visible {
+            display: flex;
         }
         .channels-header {
             padding: 12px 16px;
@@ -88,7 +91,19 @@
             border-bottom: 1px solid #2a2a4a;
             display: flex;
             align-items: center;
+            gap: 12px;
         }
+        .back-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+        .back-btn:hover { color: #fff; }
         .main-header h2 { font-size: 16px; font-weight: 500; }
         .main-header h2::before { content: '# '; color: #666; }
         .messages {
@@ -110,8 +125,9 @@
             align-items: center;
             justify-content: center;
             font-weight: bold;
+            flex-shrink: 0;
         }
-        .message-content { flex: 1; }
+        .message-content { flex: 1; min-width: 0; }
         .message-header {
             display: flex;
             align-items: baseline;
@@ -120,7 +136,7 @@
         }
         .message-author { font-weight: 500; }
         .message-time { font-size: 12px; color: #666; }
-        .message-text { line-height: 1.4; }
+        .message-text { line-height: 1.4; word-wrap: break-word; }
         .message-input-container {
             padding: 16px 20px;
             border-top: 1px solid #2a2a4a;
@@ -132,7 +148,7 @@
             border: none;
             border-radius: 8px;
             color: #eee;
-            font-size: 14px;
+            font-size: 16px;
         }
         .message-input:focus { outline: none; background: #3a3a5a; }
         .message-input::placeholder { color: #666; }
@@ -178,13 +194,15 @@
             background: rgba(0,0,0,0.7);
             align-items: center;
             justify-content: center;
+            z-index: 100;
         }
         .modal.show { display: flex; }
         .modal-content {
             background: #1e1e3a;
             padding: 24px;
             border-radius: 8px;
-            width: 400px;
+            width: 90%;
+            max-width: 400px;
         }
         .modal-content h3 { margin-bottom: 16px; }
         .modal-content input {
@@ -195,6 +213,7 @@
             border-radius: 4px;
             color: #eee;
             margin-bottom: 16px;
+            font-size: 16px;
         }
         .modal-content input:focus { outline: none; border-color: #5a5a9a; }
         .modal-buttons { display: flex; justify-content: flex-end; gap: 8px; }
@@ -231,10 +250,110 @@
         .user-info { overflow: hidden; }
         .user-name { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .user-login { font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Hide back buttons on desktop */
+        .channels-back-btn {
+            display: none;
+        }
+
+        /* Mobile styles */
+        @media screen and (max-width: 768px) {
+            body {
+                display: block;
+                position: relative;
+                overflow: hidden;
+            }
+            .sidebar {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100%;
+                border-right: none;
+                z-index: 1;
+            }
+            .channels {
+                display: flex !important;
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100%;
+                border-right: none;
+                z-index: 10;
+                transform: translateX(100%);
+                transition: transform 0.2s ease-out;
+                visibility: hidden;
+            }
+            .channels.show {
+                transform: translateX(0);
+                visibility: visible;
+            }
+            .channels-header {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            .channels-back-btn {
+                display: block;
+                background: none;
+                border: none;
+                color: #aaa;
+                font-size: 24px;
+                cursor: pointer;
+                padding: 4px 8px;
+                line-height: 1;
+            }
+            .main {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 20;
+                background: #1a1a2e;
+                transform: translateX(100%);
+                transition: transform 0.2s ease-out;
+                visibility: hidden;
+            }
+            .main.show {
+                transform: translateX(0);
+                visibility: visible;
+            }
+            .back-btn {
+                display: block;
+            }
+            .main-header {
+                display: flex !important;
+            }
+            .message-avatar {
+                width: 36px;
+                height: 36px;
+                font-size: 14px;
+            }
+            .messages {
+                padding: 12px 16px;
+            }
+            .message-input-container {
+                padding: 12px 16px;
+                padding-bottom: max(16px, env(safe-area-inset-bottom));
+            }
+            .server-item {
+                padding: 14px 16px;
+            }
+            .channel-item {
+                padding: 12px 16px;
+            }
+            .category-name {
+                padding: 12px 16px 8px;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <h1>Tambua</h1>
             <button class="add-server-btn" onclick="showAddServer()">+</button>
@@ -248,12 +367,16 @@
             </div>
         </div>
     </div>
-    <div class="channels" id="channelsPanel" style="display: none;">
-        <div class="channels-header" id="channelsHeader">Channels</div>
+    <div class="channels" id="channelsPanel">
+        <div class="channels-header">
+            <button class="channels-back-btn" onclick="goBackToServers()">&#8592;</button>
+            <span id="channelsHeader">Channels</span>
+        </div>
         <div class="channel-list" id="channelList"></div>
     </div>
-    <div class="main">
-        <div class="main-header" id="mainHeader" style="display: none;">
+    <div class="main" id="mainPanel">
+        <div class="main-header" id="mainHeader">
+            <button class="back-btn" onclick="goBackToChannels()">&#8592;</button>
             <h2 id="channelName"></h2>
         </div>
         <div class="messages" id="messages">
@@ -282,10 +405,15 @@
         let servers = [];
         let currentServer = null;
         let currentChannel = null;
+        let currentChannelName = null;
         let serverCategories = {};
-        let currentUser = null; // Our Tailscale identity
-        let oldestMessageId = null; // For pagination
+        let currentUser = null;
+        let oldestMessageId = null;
         let hasMoreMessages = false;
+
+        function isMobile() {
+            return window.innerWidth <= 768;
+        }
 
         function connect() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -302,7 +430,6 @@
         function handleMessage(msg) {
             switch (msg.type) {
                 case 'identity':
-                    // Browser user's Tailscale identity
                     currentUser = msg.user;
                     updateUserDisplay();
                     break;
@@ -340,8 +467,8 @@
             const list = document.getElementById('serverList');
             list.innerHTML = servers.map(s => `
                 <div class="server-item ${currentServer === s.id ? 'active' : ''}" onclick="selectServer('${s.id}')">
-                    <div class="server-name">${s.display_name || s.hostname}</div>
-                    <div class="server-host">${s.hostname}</div>
+                    <div class="server-name">${escapeHtml(s.display_name || s.hostname)}</div>
+                    <div class="server-host">${escapeHtml(s.hostname)}</div>
                 </div>
             `).join('');
         }
@@ -349,17 +476,48 @@
         function selectServer(id) {
             currentServer = id;
             currentChannel = null;
+            currentChannelName = null;
             renderServers();
             renderChannels();
-            document.getElementById('channelsPanel').style.display = 'flex';
-            document.getElementById('mainHeader').style.display = 'none';
-            document.getElementById('inputContainer').style.display = 'none';
-            document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a channel</p></div>';
+
+            const channelsPanel = document.getElementById('channelsPanel');
+            if (isMobile()) {
+                channelsPanel.classList.add('show');
+            } else {
+                channelsPanel.classList.add('visible');
+                document.getElementById('mainHeader').style.display = 'none';
+                document.getElementById('inputContainer').style.display = 'none';
+                document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Select a channel</p></div>';
+            }
 
             const server = servers.find(s => s.id === id);
             if (server) {
                 ws.send(JSON.stringify({ type: 'connect', hostname: server.hostname }));
             }
+        }
+
+        function goBackToServers() {
+            const channelsPanel = document.getElementById('channelsPanel');
+            if (isMobile()) {
+                channelsPanel.classList.remove('show');
+            } else {
+                channelsPanel.classList.remove('visible');
+            }
+            currentServer = null;
+            renderServers();
+        }
+
+        function goBackToChannels() {
+            const mainPanel = document.getElementById('mainPanel');
+            if (isMobile()) {
+                mainPanel.classList.remove('show');
+            }
+            if (currentChannel) {
+                ws.send(JSON.stringify({ type: 'unsubscribe', server_id: currentServer, channel_id: currentChannel }));
+            }
+            currentChannel = null;
+            currentChannelName = null;
+            renderChannels();
         }
 
         function renderChannels() {
@@ -369,10 +527,10 @@
             document.getElementById('channelsHeader').textContent = server?.display_name || 'Channels';
 
             list.innerHTML = categories.map(cat => `
-                <div class="category-name">${cat.category.name}</div>
+                <div class="category-name">${escapeHtml(cat.category.name)}</div>
                 ${(cat.channels || []).map(ch => `
-                    <div class="channel-item ${currentChannel === ch.id ? 'active' : ''}" onclick="selectChannel('${ch.id}', '${ch.name}')">
-                        ${ch.name}
+                    <div class="channel-item ${currentChannel === ch.id ? 'active' : ''}" onclick="selectChannel('${ch.id}', '${escapeHtml(ch.name)}')">
+                        ${escapeHtml(ch.name)}
                     </div>
                 `).join('')}
             `).join('');
@@ -383,13 +541,18 @@
                 ws.send(JSON.stringify({ type: 'unsubscribe', server_id: currentServer, channel_id: currentChannel }));
             }
             currentChannel = id;
+            currentChannelName = name;
             oldestMessageId = null;
             hasMoreMessages = false;
             renderChannels();
             document.getElementById('channelName').textContent = name;
-            document.getElementById('mainHeader').style.display = 'flex';
-            document.getElementById('inputContainer').style.display = 'block';
             document.getElementById('messages').innerHTML = '<div class="loading">Loading messages...</div>';
+            document.getElementById('inputContainer').style.display = 'block';
+            document.getElementById('mainHeader').style.display = 'flex';
+
+            if (isMobile()) {
+                document.getElementById('mainPanel').classList.add('show');
+            }
 
             ws.send(JSON.stringify({ type: 'subscribe', server_id: currentServer, channel_id: id }));
             ws.send(JSON.stringify({ type: 'get_history', server_id: currentServer, channel_id: id }));
@@ -432,11 +595,9 @@
                 oldestMessageId = messages[0].message.id;
             }
 
-            // Remove old load more button
             const oldBtn = container.querySelector('.load-more');
             if (oldBtn) oldBtn.remove();
 
-            // Add new content at the top
             let html = '';
             if (hasMoreMessages) {
                 html += '<div class="load-more"><button onclick="loadMoreMessages()">Load older messages</button></div>';
@@ -447,9 +608,10 @@
 
         function appendMessage(msg, author) {
             const container = document.getElementById('messages');
-            // Remove loading message if present
             const loading = container.querySelector('.loading');
             if (loading) loading.remove();
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
             container.innerHTML += formatMessage(msg, author);
             container.scrollTop = container.scrollHeight;
         }
@@ -534,6 +696,34 @@
         document.getElementById('addServerModal').onclick = (e) => {
             if (e.target.id === 'addServerModal') hideAddServer();
         };
+
+        // Handle resize events
+        window.addEventListener('resize', () => {
+            const channelsPanel = document.getElementById('channelsPanel');
+            const mainPanel = document.getElementById('mainPanel');
+
+            if (!isMobile()) {
+                // Reset mobile-specific classes when switching to desktop
+                channelsPanel.classList.remove('show');
+                mainPanel.classList.remove('show');
+                if (currentServer) {
+                    channelsPanel.classList.add('visible');
+                }
+                if (currentChannel) {
+                    document.getElementById('mainHeader').style.display = 'flex';
+                    document.getElementById('inputContainer').style.display = 'block';
+                }
+            } else {
+                // Entering mobile mode
+                channelsPanel.classList.remove('visible');
+                if (currentServer) {
+                    channelsPanel.classList.add('show');
+                }
+                if (currentChannel) {
+                    mainPanel.classList.add('show');
+                }
+            }
+        });
 
         connect();
     </script>
